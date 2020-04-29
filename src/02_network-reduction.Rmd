@@ -1,0 +1,225 @@
+---
+title: "Evidence Network - Backbone Analysis"
+output: html_document
+---
+
+The objective of running a backbone analysis is to reduce the size of the network based on the most important edges in the network [(Neal 2019)](https://cran.r-project.org/web/packages/backbone/vignettes/backbone_introduction.html). We are interested in this technique to reduce the network is a statistically justifiable way so that we can ultimately run exponential random graph models (ERGMs) on our data and get them to converge, which we have previously been unable to do. 
+
+In the backbone tutorial, Neal starts with a bipartite graph of women and events, and then project the matrix to end up with a unimodal network of women that attend protests on the same dates. In our case, we are looking at policymakers that share evidence about childhood obesity at the same Congressional hearings from 2000-2014. While we originally started with bimodal data of policymakers and hearings, we projected that data in a previous step, so we will start with the unimodal data here. 
+
+# Pull in the Data 
+
+```{r setup}
+rm(list = ls())
+# loading packages 
+for (pkg in c("tidyverse", "igraph", "backbone")) {library(pkg, character.only = TRUE)}
+setwd("/sfs/qumulo/qhome/kb7hp/data/epik-data")
+ev_raw_edgelist <- read_csv("052918 - Important Hearings - Unimodal - Cuts Across Years - Evidence.csv")
+ev_attributes <- read_csv("EPIK_EvAttributeFile_062518.csv")
+```
+
+# Data Construction 
+
+Let's pull in our unimodal edgelist and create a weighted edgelist, a matrix and an igraph object.
+
+```{r}
+# converting raw data to an adjacency matrix   
+ev_edgelist <- as.matrix(as.data.frame(ev_raw_edgelist) %>% 
+                           rename(from = Source, to = Target))
+# a weighted egdelist 
+ev_edgelist_counts <- as_tibble(ev_edgelist) %>% 
+  count(from, to) %>% rename(weight = n)
+# an igraph object with loops 
+ev_network <- graph_from_edgelist(ev_edgelist)
+#ev_network <- igraph::simplify(ev_network, remove.loops = TRUE)
+# and a matrix from that graph 
+ev_matrix <- as.matrix(as_adjacency_matrix(ev_network))
+```
+
+# Graphing full network  
+
+```{r}
+graph <- ev_network
+gorder(graph)
+gsize(graph)
+V(graph)$size <- 1
+op <- par(mar=c(0,0,0,0))
+lo <- igraph::layout_(graph, igraph::with_fr())
+plot(graph, vertex.label = 1:igraph::vcount(graph), edge.arrow.size = 0, layout = lo)
+```
+
+As you can see, I left the self-loops in this network. I did this purpose - mainly to test whether the backbone package did anything with or without these loops in. Let's take a look at the degree distribution now too so we can compare that to what we find later. 
+
+# Backbone Analysis 
+
+Let's try to reduce this data using the standard universal() function in the backbone package. We are just going to apply the default technique with the "upper" parameter set to 0, which essentially means that all of the weights are removed, all of the loops are removed, and we end up with a matrix full of 1's and 0's. 
+
+```{r, echo=FALSE, results=FALSE}
+# using backbone to chop the matrix down 
+universal_bb <- backbone::universal(ev_matrix, upper = 0, lower = NULL, bipartite = FALSE)
+# and inspect its 
+universal_bb$backbone
+```
+```{r}
+universal_bb$summary
+```
+
+Now we can visualize the results to see what whether that had any impact. 
+
+```{r}
+# let's visualize the graph 
+graph <- igraph::graph_from_adjacency_matrix(universal_bb$backbone, mode = "undirected")
+gorder(graph)
+gsize(graph)
+V(graph)$size <- 1
+op <- par(mar=c(0,0,0,0))
+lo <- igraph::layout_(graph, igraph::with_fr())
+plot(graph, vertex.label = 1:igraph::vcount(graph), layout = lo)
+```
+
+This graph certainly looks more manageable than the original graph and cut the edge count in half, but, to be honest, this is mostly because the loops and weights were removed. However, given that our previous attempts at running ERGMs did not factor in the weights, this is not likely to fix the problem. 
+
+Before we move on, let's get a baseline for what our degree distribution looks like. 
+
+```{r}
+original_nodelist <- data.frame(id = c(1:(igraph::vcount(graph))), policymaker = igraph::V(graph)$name)
+original_nodelist$degree <- degree(graph)
+ggplot(original_nodelist, aes(x=degree)) + geom_histogram(binwidth=0.5)
+```
+
+Let's try some alternatives on the upper and lower thresholds of the universal() function. One approach could be using the mean with +/- 1SD as the upper and lower bounds.  
+
+```{r, echo=FALSE, results=FALSE}
+# using backbone to chop the matrix down 
+mean_bb <- backbone::universal(ev_matrix, upper = function(x)mean(x)+sd(x), 
+                               lower = function(x)mean(x)-sd(x), bipartite = FALSE)
+mean_bb$backbone
+```
+
+```{r}
+mean_bb$summary
+```
+
+```{r}
+# let's visualize the graph 
+graph <- igraph::graph_from_adjacency_matrix(universal_bb$backbone, mode = "undirected")
+gorder(graph)
+gsize(graph)
+V(graph)$size <- 1
+op <- par(mar=c(0,0,0,0))
+lo <- igraph::layout_(graph, igraph::with_fr())
+plot(graph, vertex.label = 1:igraph::vcount(graph), layout = lo)
+```
+
+Look's like that didn't really change anything at all. Before we go down this road too far, let's try some alternatives...
+
+# Alternative Reduction Techniques 
+
+## Largest Component 
+
+Let's try to cut down the network based on the largest [component](https://igraph.org/r/doc/components.html) and to decompose the network using a [k-core technique](https://igraph.org/r/doc/coreness.html). As a reminder, the component() function calculates the maximal connected components of a graph while the coreness() function calculates a maximal subgraph in which each vertex has at least degree k.
+
+```{r}
+nodelist <- data.frame(id = c(1:(igraph::vcount(ev_network))), policymaker = igraph::V(ev_network)$name)
+nodelist$k_core <- coreness(ev_network)
+components <- components(ev_network)
+nodelist$component <- components$membership
+```
+```{r}
+nodelist %>% count(component)
+```
+
+```{r}
+ev_network <- igraph::simplify(ev_network, remove.loops = TRUE)
+plot_graph = function(g, main="", layout=layout_with_fr,  vsize=5) {
+  comp = components(g)
+  max_comp = (comp$membership == which.max(comp$csize))
+  special = ifelse(max_comp, "orange", "blue")
+  plot(g, layout=layout, vertex.size=vsize, vertex.label=NA,
+       vertex.color=special, edge.arrow.size = 0, main=main)
+}
+plot_graph(ev_network)
+```
+
+The graph reduces from n=286 to n=254 if we just take the largest component (i.e. keep those in orange, remove those in blue).
+
+```{r}
+# let's create a character vector to filter out those not in the main component 
+deleted_people <- nodelist %>% mutate(policymaker = as.character(policymaker)) %>% filter(component != 1)
+deleted_people <- paste(c("\\b(?i)(zcq", deleted_people$policymaker, "zxq)\\b"), collapse = "|")
+
+# and then actually filter them out 
+component_edgelist <- ev_raw_edgelist %>% 
+  count(Source, Target) %>% 
+  filter(Source != Target) %>%
+  filter(!grepl(deleted_people, Source)) %>%
+  filter(!grepl(deleted_people, Target)) %>% 
+  select(-n)
+
+component_graph <- graph_from_edgelist(as.matrix(component_edgelist))
+gorder(component_graph)
+gsize(component_graph)
+V(component_graph)$size <- 1
+op <- par(mar=c(0,0,0,0))
+lo <- igraph::layout_(component_graph, igraph::with_fr())
+plot(component_graph, vertex.label = 1:igraph::vcount(component_graph), edge.arrow.size = 0, layout = lo)
+```
+
+This is what the reduced network would look like, but I think we need to look more into the degree distribution. 
+
+```{r}
+component_nodelist <- data.frame(id = c(1:(igraph::vcount(component_graph))), policymaker = igraph::V(component_graph)$name)
+component_nodelist$degree <- degree(component_graph)
+ggplot(component_nodelist, aes(x=degree)) + geom_histogram(binwidth=1)
+```
+
+Well, this degree distribution is not much different than our original network. In one sense, that means we are not radically distorting out network, but, on the other hand, I also don't think this opens up the possibility of running the weighted degree terms for our ERGMs. Let's take a look at the k-core. 
+
+```{r}
+nodelist %>% count(k_core)
+```
+
+We have a really wide range for the k-core composition, so this was not helpful.
+
+# Backbone: The Return
+
+Let's try to run this backbone analysis again. 
+
+```{r, echo=FALSE, results=FALSE}
+component_matrix <- as.matrix(as_adjacency_matrix(component_graph))
+# using backbone to chop the matrix down 
+component_bb <- backbone::universal(component_matrix, upper = function(x)mean(x)+sd(x), 
+                               lower = function(x)mean(x)-sd(x), bipartite = FALSE)
+component_bb$backbone
+```
+
+```{r}
+component_bb$summary
+```
+
+```{r}
+# let's visualize the graph 
+comp_bb_graph <- igraph::graph_from_adjacency_matrix(component_bb$backbone, mode = "undirected")
+gorder(comp_bb_graph)
+gsize(comp_bb_graph)
+V(comp_bb_graph)$size <- 1
+op <- par(mar=c(0,0,0,0))
+lo <- igraph::layout_(comp_bb_graph, igraph::with_fr())
+plot(comp_bb_graph, vertex.label = 1:igraph::vcount(comp_bb_graph), layout = lo)
+```
+
+Doesn't look like it did much... other than cut half the edges out.
+
+```{r}
+comp_bb_nodelist <- data.frame(id = c(1:(igraph::vcount(comp_bb_graph))), policymaker = igraph::V(comp_bb_graph)$name)
+comp_bb_nodelist$degree <- degree(comp_bb_graph)
+ggplot(comp_bb_nodelist, aes(x=degree)) + geom_histogram(binwidth=0.5)
+```
+
+The degree distribution looks almost exactly the same as what we had originally had. I'm not really sure what to make of this, so I think I would recommend that we talk more about it or just pursue ERGMs on the largest component graph. 
+
+# References 
+
+https://cran.r-project.org/web/packages/backbone/vignettes/backbone_introduction.html
+https://cran.r-project.org/web/packages/backbone/backbone.pdf
+https://cran.r-project.org/web/packages/backbone/readme/README.html

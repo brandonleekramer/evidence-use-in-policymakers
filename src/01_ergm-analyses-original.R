@@ -188,13 +188,13 @@ summary(ev.altk2_4)
 summary(EVNETN ~ edges + degree(1:21))
 
 # The output demonstrates that degree ranges 3 through 14 are the most likely to provide the best fitting model based on degree distributions. However, as you will see more below, even after we established this range of connectivity, we still have to test various iterations of the degree parameters to find the best fitting models. In the end, we found that the range was actually 4:11 actors - point to a "structural sweetspot" where actors must be at least connected to four other actors to increase their probability of sharing evidence, but do not necessarily need to be connected to more than 11 to raise that probability. 
-  
+
 # TESTING ATTRIBUTE-BASED MODELS  
-  
+
 # Next, we began testing various how various nodal attributes affected the probability of tie formation. Intitially, these models were predicated on affiliation (affil), a proxy for whether an actor (polnotpol), 
 #  FINISH THIS HERE !!!!!!! 
 # Note that some of these models were developed before the degree distribution was honed more precisely. However, at the time of development, it was clear that four degrees of connection would have a substantial impact on the model. 
-  
+
 # Affiliation models 
 
 ev.affil <- ergm(EVNETN~edges + nodematch("affil"), control=control.ergm(parallel=32, MCMLE.maxit = 25, parallel.type="PSOCK"))
@@ -254,7 +254,7 @@ summary(ev.k4.tenure)
 mcmc.diagnostics(ev.k4.tenure)
 evgof.1.k4.tenure<-gof(ev.k4.tenure)
 plot(evgof.1.k4.tenure)
-  
+
 ev.d4.k4.tenure <- ergm(EVNETN~edges + degree(4) + kstar(4) + nodematch("tenure"), control=control.ergm(parallel=32, MCMLE.maxit = 25, parallel.type="PSOCK"))
 summary(ev.d4.k4.tenure)
 mcmc.diagnostics(ev.d4.k4.tenure)
@@ -855,35 +855,3 @@ plot(gof_m2); gof_m2
 plot(gof_m3); gof_m3
 plot(gof_m4); gof_m4
 plot(gof_overfit); gof_overfit
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
