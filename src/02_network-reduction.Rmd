@@ -27,6 +27,12 @@ Let's pull in our unimodal edgelist and create a weighted edgelist, a matrix and
 ev_edgelist <- as.matrix(as.data.frame(ev_raw_edgelist) %>% 
                            rename(from = Source, to = Target))
 # a weighted egdelist 
+ev_edgelist_counts <- ev_raw_edgelist %>% 
+  rename(from = Source, to = Target) %>% 
+  group_by(from, to) %>%
+  summarise(weight = n()) %>% 
+  ungroup()
+
 ev_edgelist_counts <- as_tibble(ev_edgelist) %>% 
   count(from, to) %>% rename(weight = n)
 # an igraph object with loops 
@@ -58,9 +64,7 @@ Let's try to reduce this data using the standard universal() function in the bac
 # using backbone to chop the matrix down 
 universal_bb <- backbone::universal(ev_matrix, upper = 0, lower = NULL, bipartite = FALSE)
 # and inspect its 
-universal_bb$backbone
-```
-```{r}
+# universal_bb$backbone
 universal_bb$summary
 ```
 
@@ -93,10 +97,7 @@ Let's try some alternatives on the upper and lower thresholds of the universal()
 # using backbone to chop the matrix down 
 mean_bb <- backbone::universal(ev_matrix, upper = function(x)mean(x)+sd(x), 
                                lower = function(x)mean(x)-sd(x), bipartite = FALSE)
-mean_bb$backbone
-```
-
-```{r}
+# mean_bb$backbone
 mean_bb$summary
 ```
 
@@ -190,7 +191,7 @@ component_matrix <- as.matrix(as_adjacency_matrix(component_graph))
 # using backbone to chop the matrix down 
 component_bb <- backbone::universal(component_matrix, upper = function(x)mean(x)+sd(x), 
                                lower = function(x)mean(x)-sd(x), bipartite = FALSE)
-component_bb$backbone
+# component_bb$backbone
 ```
 
 ```{r}
@@ -217,6 +218,72 @@ ggplot(comp_bb_nodelist, aes(x=degree)) + geom_histogram(binwidth=0.5)
 ```
 
 The degree distribution looks almost exactly the same as what we had originally had. I'm not really sure what to make of this, so I think I would recommend that we talk more about it or just pursue ERGMs on the largest component graph. 
+
+# Extracting Weighted Information  
+
+Extracting edge attributes from igraph is not a straightforward process so let's take our original weighted edgelist, re-create out network and graph a matrix. 
+
+```{r}
+ev_edgelist_counts
+source <- as.data.frame(unique(ev_edgelist_counts$from))
+target <- as.data.frame(unique(ev_edgelist_counts$to))
+colnames(source) <- "label"
+colnames(target) <- "label"
+nodes <- as.data.frame(unique(rbind(source, target)))
+nodes <- nodes %>% rowid_to_column("id")
+edges <- ev_edgelist_counts %>% rename(source = from, target = to)
+edges <- edges %>% 
+  left_join(nodes, by = c("source" = "label")) %>% 
+  rename(from = id)
+edges <- edges %>% 
+  left_join(nodes, by = c("target" = "label")) %>% 
+  rename(to = id)
+edges <- edges %>% select(from, to, weight)
+wtd_network <- graph_from_data_frame(d = edges, vertices = nodes, directed = FALSE)
+E(wtd_network)$weight
+
+wtd_matrix <- as.matrix(as_adjacency_matrix(wtd_network))
+wtd_matrix
+```
+
+```{r}
+nodelist <- data.frame(id = c(1:(igraph::vcount(wtd_network))), policymaker = igraph::V(wtd_network)$name)
+nodelist$k_core <- coreness(wtd_network)
+components <- components(wtd_network)
+nodelist$component <- components$membership
+
+# let's create a character vector to filter out those not in the main component 
+remaining_people <- nodelist %>% mutate(policymaker = as.character(policymaker)) %>% filter(component == 1)
+deleted_people <- nodelist %>% mutate(policymaker = as.character(policymaker)) %>% filter(component != 1)
+deleted_people <- paste(c("\\b(?i)(zcq", deleted_people$policymaker, "zxq)\\b"), collapse = "|")
+
+# and then actually filter them out 
+component_edgelist <- edges %>% 
+  filter(from != to) %>%
+  filter(!grepl(deleted_people, from)) %>%
+  filter(!grepl(deleted_people, to)) 
+
+remaining_people
+edges
+component_edgelist 
+
+component_graph <- graph_from_data_frame(d = component_edgelist, vertices = remaining_people, directed = FALSE)
+E(component_graph)$weight
+
+
+gorder(component_graph)
+gsize(component_graph)
+V(component_graph)$size <- 1
+op <- par(mar=c(0,0,0,0))
+lo <- igraph::layout_(component_graph, igraph::with_fr())
+plot(component_graph, vertex.label = 1:igraph::vcount(component_graph), edge.arrow.size = 0, layout = lo)
+```
+
+```{r}
+setwd("/sfs/qumulo/qhome/kb7hp/data/epik-data")
+write_csv("epik_evnet_reduced_wts_050520.csv")
+write_csv("epik_evnet_reduced_nowts_050520.csv")
+```
 
 # References 
 
