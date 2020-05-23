@@ -225,6 +225,26 @@ Extracting edge attributes from igraph is not a straightforward process so let's
 
 ```{r}
 ev_edgelist_counts
+ev_edgelist_counts %>% 
+  filter(from == "AlFranken" | to == "AlFranken")
+
+
+
+
+edges <- ev_edgelist_counts
+ev_edgelist_counts
+aggregate( edges["weight"], by=list(from=edges$to, to=edges$from), FUN=sum )
+
+df[!duplicated(df_dups),]
+
+
+if from_to_comb = to_from_comb then delete to_from_comb
+
+```
+
+
+```{r}
+ev_edgelist_counts
 source <- as.data.frame(unique(ev_edgelist_counts$from))
 target <- as.data.frame(unique(ev_edgelist_counts$to))
 colnames(source) <- "label"
@@ -259,6 +279,7 @@ deleted_people <- paste(c("\\b(?i)(zcq", deleted_people$policymaker, "zxq)\\b"),
 
 # and then actually filter them out 
 component_edgelist <- edges %>% 
+  filter() %>% 
   filter(from != to) %>%
   filter(!grepl(deleted_people, from)) %>%
   filter(!grepl(deleted_people, to)) 

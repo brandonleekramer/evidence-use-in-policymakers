@@ -13,7 +13,7 @@
 # Loading packages 
 library(plyr)
 library(dplyr)
-library(tidyr)
+library(tidyverse)
 library(statnet)
 library(ggplot2)
 library(ggnetwork)
@@ -21,13 +21,21 @@ library(ergm)
 library(btergm)
 library(parallel)
 library(ergm.graphlets)
+library(statnet)
+
+setwd("/sfs/qumulo/qhome/kb7hp/data/epik-data")
+EVDATAN <- read_csv("052918 - Important Hearings - Unimodal - Cuts Across Years - Evidence.csv")
 
 # Constructing the network 
 EVDATAN=read.csv(file.choose(),header=TRUE)
 EVDATAN[,1]=as.character(EVDATAN[,1])
 EVDATAN[,2]=as.character(EVDATAN[,2])
-EVNETN=as.network(EVDATAN,matrix.type="edgelist",directed=FALSE)
+ev_edgelist <- as.matrix(as.data.frame(EVDATAN)) 
+EVNETN=as.network(ev_edgelist, matrix.type="edgelist",directed=FALSE)
 EVDEGN=degree(EVNETN)
+
+plot(EVNETN,displaylabels=F)
+summary.network(EVNETN,print.adj = FALSE)
 
 # Loading network attributes 
 attrEVNETN <- read.csv(file.choose(), header = TRUE) 
