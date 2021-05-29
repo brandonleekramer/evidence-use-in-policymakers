@@ -1,0 +1,21 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(statnet)
+setwd("/sfs/qumulo/qhome/kb7hp/data/epik-data") #setwd
+EVDATAN <- read_csv("EPIK_Evidence_WeightedEdgelist_052320.csv") # pulls in .csv
+EVDATAN <- EVDATAN %>% filter(Source != Target) # removes self-loops 
+EVEDGELIST <- as.matrix(as.data.frame(EVDATAN %>% select(-Weight))) # converts the edgelist to a matrix
+EVNETN=as.network(EVEDGELIST, matrix.type="edgelist", directed=FALSE) # converts that to a network 
+EVNETN%e%"Weight" <- EVDATAN$Weight # sets the weight in the network 
+plot.network(EVNETN, edge.lwd = get.edge.value(EVNETN,"weight")) # plots the weighted network 
+summary.network(EVNETN, print.adj = FALSE) # gives you a network summary further validating the weighted edges 
+
+```
+
+

@@ -42,6 +42,32 @@ ev_network <- graph_from_edgelist(ev_edgelist)
 ev_matrix <- as.matrix(as_adjacency_matrix(ev_network))
 ```
 
+# Data Experimentation 
+
+```{r}
+
+exp_network <- simplify(graph.data.frame(ev_edgelist_counts, directed = FALSE), 
+                         remove.loops = FALSE, 
+                         edge.attr.comb = igraph_opt("edge.attr.comb"))
+is_weighted(exp_network)
+
+exp_edgelist <- reshape2::melt(as.matrix(as_adjacency_matrix(exp_network, type = "lower", attr = "weight", sparse = T)))
+
+ev_edgelist_counts 
+exp_edgelist %>% %>% filter(value != 0) %>% arrange(-value)
+
+3540/2
+
+```
+
+
+
+
+
+
+
+
+
 # Graphing full network  
 
 ```{r}
